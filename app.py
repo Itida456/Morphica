@@ -8,9 +8,10 @@ import random
 from botocore.exceptions import ClientError
 
 st.set_page_config(page_title="AI Image Generator", layout="centered")
-st.title("AI Image Generator")
 
 # Initialize session state
+if 'page' not in st.session_state:
+    st.session_state.page = "Text to Image"
 
 def create_boto3_client(service_name, region):
     return boto3.client(service_name, region_name=region)
@@ -111,7 +112,7 @@ def generate_text_to_image(prompt, model_id, region):
         return response_json["artifacts"][0]["base64"]
 
 def generate_image_to_image(prompt, input_image, model_id, region):
-    """Generate image from image + text"""
+    """Transform given image based on style"""
     client = create_boto3_client("bedrock-runtime", region)
     
     # Process image to meet requirements
@@ -179,93 +180,175 @@ model_options = {
 selected_model = st.sidebar.selectbox("Model:", list(model_options.keys()))
 model_id = model_options[selected_model]
 
-# Main interface
-generation_mode = st.radio("Mode:", ["Text to Image", " Image to Image"])
+# Page Navigation
+st.sidebar.markdown("---")
+st.sidebar.markdown("### Navigation")
+if st.sidebar.button("Text to Image", use_container_width=True):
+    st.session_state.page = "Text to Image"
+if st.sidebar.button("Image to Image", use_container_width=True):
+    st.session_state.page = "Image to Image"
 
-# Image upload (only for image+text mode)
-uploaded_image = None
-if generation_mode == " Image to Image":
-    uploaded_file = st.file_uploader("Upload Image:", type=['png', 'jpg', 'jpeg'])
-    if uploaded_file:
-        uploaded_image = Image.open(uploaded_file)
-        st.image(uploaded_image, caption="Input Image", width=300)
-
-
-# Enhanced style presets
-styles = {
-    "None": "",
-    "Anime": "anime portrait of a character, beautiful lighting, soft shading, colorful background, high detail",
-    "Portrait": "professional portrait, studio lighting, sharp focus, detailed",
-    "Photorealistic": "photorealistic, ultra high resolution, sharp focus, professional photography",
-    "Digital Art": "highly detailed digital painting, creative lighting, stylized illustration, vibrant colors",
-    "Cinematic": "cinematic lighting, dramatic atmosphere, film photography style",
-    "Dreamscape": "floating whale in the sky, pastel dream clouds, magical, surrealism art",
-    "Cyberpunk": "cyberpunk style, neon lights, futuristic city, high contrast",
-    "Sketch": "pencil sketch, hand-drawn lines, minimal shading, black and white",
-    "Cartoon": "cartoon style illustration, bold lines, flat colors, cheerful"
-}
-style = st.selectbox("Style:", list(styles.keys()))
-
-# Prompt logic
-if generation_mode == "Text to Image":
+# Main Content
+if st.session_state.page == "Text to Image":
+    st.title("🎨 Text to Image Generator")
+    st.markdown("Generate images from text descriptions")
+    
+    # Text to Image style presets
+    text_to_image_styles = {
+        "None": "",
+        "Anime": "anime portrait of a character, beautiful lighting, soft shading, colorful background, high detail",
+        "Portrait": "professional portrait, studio lighting, sharp focus, detailed",
+        "Photorealistic": "photorealistic, ultra high resolution, sharp focus, professional photography",
+        "Digital Art": "highly detailed digital painting, creative lighting, stylized illustration, vibrant colors",
+        "Cinematic": "cinematic lighting, dramatic atmosphere, film photography style",
+        "Dreamscape": "in dreamy ethereal style, soft magical lighting, keep original subject, pastel dream clouds, surrealism art",
+        "Cyberpunk": "cyberpunk style, neon lights, futuristic city, high contrast",
+        "Sketch": "pencil sketch, hand-drawn lines, minimal shading, black and white",
+        "Cartoon": "cartoon style illustration, bold lines, flat colors, cheerful"
+    }
+    
+    style = st.selectbox("Style Preset:", list(text_to_image_styles.keys()))
     prompt_input = st.text_area("Describe your image:", height=100, 
                                 value="high quality, detailed, professional")
-    prompt = f"{styles[style]}, {prompt_input}" if style != "None" else prompt_input
-else:
-    prompt = styles[style] if style != "None" else ""
-
-# Generate button
-can_generate = True
-if generation_mode == "Image to Image" and uploaded_image is None:
-    can_generate = False
-    st.warning("Please upload an image first")
-
-if st.button("Generate", type="primary", disabled=not can_generate):
-    if not prompt.strip():
-        st.error("Please enter a prompt")
+    
+    # Combine style and prompt
+    if style != "None":
+        final_prompt = f"{text_to_image_styles[style]}, {prompt_input}"
     else:
-        try:
-            with st.spinner("Generating..."):
-                if generation_mode == "Text to Image" or uploaded_image is None:
-                    image_base64 = generate_text_to_image(prompt, model_id, region)
-                else:
-                    image_base64 = generate_image_to_image(style, uploaded_image, model_id, region)
+        final_prompt = prompt_input
+    
+    st.markdown("**Final Prompt Preview:**")
+    st.info(final_prompt)
+    
+    if st.button("Generate Image", type="primary"):
+        if not prompt_input.strip():
+            st.error("Please enter a prompt")
+        else:
+            try:
+                with st.spinner("Generating your image..."):
+                    image_base64 = generate_text_to_image(final_prompt, model_id, region)
+                    
+                    # Display result
+                    generated_image = Image.open(io.BytesIO(base64.b64decode(image_base64)))
+                    st.image(generated_image, caption="Generated Image")
+                    
+                    # Download
+                    img_buffer = io.BytesIO()
+                    generated_image.save(img_buffer, format='PNG')
+                    st.download_button(
+                        "Download Image",
+                        data=img_buffer.getvalue(),
+                        file_name=f"text_to_image_{random.randint(1000,9999)}.png",
+                        mime="image/png"
+                    )
+                    
+            except ClientError as e:
+                error_code = e.response['Error']['Code']
+                error_message = e.response['Error']['Message']
                 
-                # Display result
-                generated_image = Image.open(io.BytesIO(base64.b64decode(image_base64)))
+                st.error(f"Error: {error_message}")
                 
-                if uploaded_image and generation_mode == "Image to Image":
+                if "ValidationException" in error_code:
+                    st.info("Try: Enable model access in AWS Bedrock Console")
+                elif "AccessDenied" in error_code:
+                    st.info("Try: Check AWS credentials and permissions")
+                elif "ThrottlingException" in error_code:
+                    st.info("Try: Wait a moment and try again")
+                    
+            except Exception as e:
+                st.error(f"Error: {str(e)}")
+                st.info("Try: Check model availability in your region")
+
+elif st.session_state.page == "Image to Image":
+    st.title("🖼️ Image to Image Generator")
+    st.markdown("Transform your images with AI styles")
+    
+    # Image to Image style presets
+    image_to_image_styles = {
+        "None": "",
+        "Anime": "anime style",
+        "Portrait": "portrait style", 
+        "Photorealistic": "photorealistic",
+        "Digital Art": "digital painting style",
+        "Cinematic": "cinematic lighting",
+        "Dreamscape": "dreamy ethereal style",
+        "Cyberpunk": "cyberpunk aesthetic",
+        "Sketch": "pencil sketch style",
+        "Cartoon": "cartoon style"
+    }
+    
+    # Image upload
+    uploaded_file = st.file_uploader("Upload your image:", type=['png', 'jpg', 'jpeg'])
+    
+    if uploaded_file:
+        uploaded_image = Image.open(uploaded_file)
+        
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            st.image(uploaded_image, caption="Original Image", use_column_width=True)
+        
+        with col2:
+            st.markdown("**Image Info:**")
+            st.write(f"Size: {uploaded_image.size[0]} x {uploaded_image.size[1]}")
+            st.write(f"Format: {uploaded_image.format}")
+            st.write(f"Mode: {uploaded_image.mode}")
+        
+        style = st.selectbox("Style Transformation:", list(image_to_image_styles.keys()))
+        
+        # Use only the style preset
+        final_prompt = image_to_image_styles[style] if style != "None" else "enhance the image"
+        
+        if style != "None":
+            st.markdown("**Selected Style:**")
+            st.info(f"✨ {style} - {image_to_image_styles[style]}")
+        else:
+            st.markdown("**Selected Style:**")
+            st.info("🔧 Basic Enhancement - enhance the image")
+        
+        if st.button("Transform Image", type="primary"):
+            try:
+                with st.spinner("Transforming your image..."):
+                    image_base64 = generate_image_to_image(final_prompt, uploaded_image, model_id, region)
+                    
+                    # Display result
+                    generated_image = Image.open(io.BytesIO(base64.b64decode(image_base64)))
+                    
                     col1, col2 = st.columns(2)
                     with col1:
-                        st.image(uploaded_image, caption="Original")
+                        st.image(uploaded_image, caption="Original", use_column_width=True)
                     with col2:
-                        st.image(generated_image, caption="Generated")
-                else:
-                    st.image(generated_image, caption="Generated Image")
+                        st.image(generated_image, caption="Transformed", use_column_width=True)
+                    
+                    # Download
+                    img_buffer = io.BytesIO()
+                    generated_image.save(img_buffer, format='PNG')
+                    st.download_button(
+                        "Download Transformed Image",
+                        data=img_buffer.getvalue(),
+                        file_name=f"image_to_image_{random.randint(1000,9999)}.png",
+                        mime="image/png"
+                    )
+                    
+            except ClientError as e:
+                error_code = e.response['Error']['Code']
+                error_message = e.response['Error']['Message']
                 
-                # Download
-                img_buffer = io.BytesIO()
-                generated_image.save(img_buffer, format='PNG')
-                st.download_button(
-                    "Download",
-                    data=img_buffer.getvalue(),
-                    file_name=f"generated_{random.randint(1000,9999)}.png",
-                    mime="image/png"
-                )
+                st.error(f"Error: {error_message}")
                 
-        except ClientError as e:
-            error_code = e.response['Error']['Code']
-            error_message = e.response['Error']['Message']
-            
-            st.error(f"Error: {error_message}")
-            
-            if "ValidationException" in error_code:
-                st.info("Try: Enable model access in AWS Bedrock Console")
-            elif "AccessDenied" in error_code:
-                st.info("Try: Check AWS credentials and permissions")
-            elif "ThrottlingException" in error_code:
-                st.info("Try: Wait a moment and try again")
-                
-        except Exception as e:
-            st.error(f"Error: {str(e)}")
-            st.info("Try: Check model availability in your region")
+                if "ValidationException" in error_code:
+                    st.info("Try: Enable model access in AWS Bedrock Console")
+                elif "AccessDenied" in error_code:
+                    st.info("Try: Check AWS credentials and permissions")
+                elif "ThrottlingException" in error_code:
+                    st.info("Try: Wait a moment and try again")
+                    
+            except Exception as e:
+                st.error(f"Error: {str(e)}")
+                st.info("Try: Check model availability in your region")
+    
+    else:
+        st.info("👆 Please upload an image to get started")
+        st.markdown("### Supported formats:")
+        st.markdown("- PNG, JPG, JPEG")
+        st.markdown("- Max file size: 200MB")
+        st.markdown("- Recommended: Square images (1024x1024) for best results")

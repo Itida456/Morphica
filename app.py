@@ -1,4 +1,3 @@
-# --- All your existing imports and setup code here ---
 import streamlit as st
 import boto3
 import json
@@ -131,25 +130,21 @@ def generate_image_to_image(prompt, input_image, model_id, region):
         return json.loads(response["body"].read())["images"][0]
 
 # --- Sidebar ---
-st.sidebar.title("⚙️ Settings")
+st.sidebar.title("Settings")
 region = st.sidebar.selectbox("AWS Region:", ["us-east-1", "us-west-2", "eu-west-1"])
 st.session_state.region = region
 
 model_options = {
-    "Amazon Titan V2": "amazon.titan-image-generator-v2",
     "Amazon Titan V1": "amazon.titan-image-generator-v1",
-    "Stability AI SDXL": "stability.stable-diffusion-xl-v1",
-    "Stability AI SD3": "stability.sd3-medium-v1"
+    "Stability AI SDXL": "stability.stable-diffusion-xl-v1"
 }
-st.sidebar.markdown("**📳Model Selection**")
+st.sidebar.markdown("**Model Selection**")
 selected_model = st.sidebar.selectbox(
     "Choose a model:",
     list(model_options.keys()),
     help="""
-- **Amazon Titan V2**: Great for stylized faces, clean detail.
 - **Amazon Titan V1**: Basic version of Titan, still powerful.
 - **Stability AI SDXL**: High creativity, strong textures, very detailed.
-- **Stability AI SD3**: More control, better at complex prompts.
 """
 )
 
@@ -157,27 +152,25 @@ model_id = model_options[selected_model]
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### Navigate:")
-if st.sidebar.button("🏠 Home", use_container_width=True):
+if st.sidebar.button("Home", use_container_width=True):
     st.session_state.page = "Home"
-if st.sidebar.button("📝 Text to Image", use_container_width=True):
+if st.sidebar.button("Text to Image", use_container_width=True):
     st.session_state.page = "Text to Image"
-if st.sidebar.button("🖼️ Image to Image", use_container_width=True):
+if st.sidebar.button("Image to Image", use_container_width=True):
     st.session_state.page = "Image to Image"
 
-with st.sidebar.expander("🧠 Prompt History", expanded=True):
+with st.sidebar.expander(" Prompt History", expanded=True):
     if st.session_state.prompt_memory:
         for prompt in reversed(st.session_state.prompt_memory):
             st.markdown(f"- {prompt}")
-        if st.button("🗑️ Clear Prompt History"):
+        if st.button("Clear Prompt History"):
             st.session_state.prompt_memory = []
             st.rerun()
     else:
         st.write("No prompt history yet.")
 
 # --- HOME PAGE ---
-# --- HOME PAGE ---
 if st.session_state.page == "Home":
-    # Encode your images to base64 (add these only once at the top level)
     def load_image_as_base64(file_path):
         with open(file_path, "rb") as f:
             return base64.b64encode(f.read()).decode()
@@ -261,17 +254,16 @@ if st.session_state.page == "Home":
             <img src="data:image/png;base64,{image_base64_list[3]}" class="carousel-slide">
         </div>
     """, unsafe_allow_html=True)
-        # Add space between carousel and buttons
+    
     st.markdown("<div style='margin-top: 40px;'></div>", unsafe_allow_html=True)
-
 
     col1, col2 = st.columns([1, 1])
     with col1:
-        if st.button("📝 Try Text-to-Image", use_container_width=True):
+        if st.button("Try Text-to-Image", use_container_width=True):
             st.session_state.page = "Text to Image"
             st.rerun()
     with col2:
-        if st.button("🖼️ Try Image-to-Image", use_container_width=True):
+        if st.button("Try Image-to-Image", use_container_width=True):
             st.session_state.page = "Image to Image"
             st.rerun()
 
@@ -287,11 +279,11 @@ if st.session_state.page == "Home":
     """, unsafe_allow_html=True)
 
 
-# ✅ Continue with "Text to Image" and "Image to Image" pages (your code)...
+# "Text to Image"
 elif st.session_state.page == "Text to Image":
     st.markdown("""
     <h2 style='text-align: center; font-size: 2.5em; color: #FF6F61; margin-bottom: 10px;'>
-        Create Images Just by a Simple Text 📷
+        Create Images Just by a Simple Text 
     </h2>
 """, unsafe_allow_html=True)
 
@@ -310,34 +302,34 @@ elif st.session_state.page == "Text to Image":
         "Cartoon": "cartoon style illustration, bold lines, flat colors, cheerful"
     }
 
-    style = st.selectbox("🎨 Style Preset", list(style_presets.keys()))
-    prompt_input = st.text_area("🧾 Your Prompt", value="high quality, detailed, professional", height=100)
+    style = st.selectbox("Style Preset", list(style_presets.keys()))
+    prompt_input = st.text_area("Your Prompt", value="high quality, detailed, professional", height=100)
 
     final_prompt = f"{style_presets[style]}, {prompt_input}" if style != "None" else prompt_input
 
-    st.markdown("**📌 Final Prompt:**")
+    st.markdown("** Final Prompt:**")
     st.info(final_prompt)
 
     col1, col2 = st.columns([2, 1])
     with col1:
-        generate_btn = st.button("🚀 Generate Image", use_container_width=True)
+        generate_btn = st.button("Generate Image", use_container_width=True)
     with col2:
-        clear_btn = st.button("🧹 Clear Prompt", use_container_width=True)
+        clear_btn = st.button(" Clear Prompt", use_container_width=True)
 
     if generate_btn:
         if not prompt_input.strip():
-            st.error("❌ Please enter a prompt")
+            st.error("Please enter a prompt")
         else:
             st.session_state.prompt_memory.append(final_prompt)
             try:
                 with st.spinner("Let the model cook..."):
                     image_base64 = generate_text_to_image(final_prompt, model_id, region)
                     generated_image = Image.open(io.BytesIO(base64.b64decode(image_base64)))
-                    st.image(generated_image, caption="✨ Generated Image")
+                    st.image(generated_image, caption=" Generated Image")
 
                     img_buffer = io.BytesIO()
                     generated_image.save(img_buffer, format='PNG')
-                    st.download_button("⬇️ Download", img_buffer.getvalue(), file_name="generated_image.png", mime="image/png")
+                    st.download_button("Download", img_buffer.getvalue(), file_name="generated_image.png", mime="image/png")
 
             except ClientError as e:
                 st.error(f"Error: {e.response['Error']['Message']}")
@@ -352,7 +344,7 @@ elif st.session_state.page == "Text to Image":
 elif st.session_state.page == "Image to Image":
     st.markdown("""
     <h2 style='text-align: center; font-size: 2.5em; color: #0ea3c4; margin-bottom: 10px;'>
-        Create Images Just by Uploading Images 🖼️
+        Create Images Just by Uploading Images 
     </h2>
 """, unsafe_allow_html=True)
 
@@ -380,7 +372,7 @@ elif st.session_state.page == "Image to Image":
         style = st.selectbox("🖌️ Choose Style", list(style_options.keys()))
         final_prompt = style_options[style] if style != "None" else "enhance the image"
 
-        if st.button("🎨 Transform Image", type="primary"):
+        if st.button("Transform Image", type="primary"):
             st.session_state.prompt_memory.append(final_prompt)
             try:
                 with st.spinner("Transforming your image..."):
@@ -395,7 +387,7 @@ elif st.session_state.page == "Image to Image":
 
                     img_buffer = io.BytesIO()
                     output_image.save(img_buffer, format='PNG')
-                    st.download_button("⬇️ Download", img_buffer.getvalue(), file_name="transformed_image.png", mime="image/png")
+                    st.download_button("Download", img_buffer.getvalue(), file_name="transformed_image.png", mime="image/png")
 
             except Exception as e:
                 st.error(f"Error: {str(e)}")
